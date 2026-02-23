@@ -1,56 +1,113 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import fs from "fs";
-import dotenv from "dotenv";
-dotenv.config();
+// controllers/s3Controller.js
 
-const s3 = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY,
-    secretAccessKey: process.env.AWS_SECRET_KEY,
-  },
-});
+import fs from "fs";
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { s3 } from "../utils/s3Client.js";
+
+
+// ==============================
+// SINGLE FILE UPLOAD
+// ==============================
 
 export const uploadSingle = async (req, res) => {
-  const file = req.file;
-  const fileStream = fs.createReadStream(file.path);
-
-  const params = {
-    Bucket: process.env.AWS_BUCKET,
-    Key: file.originalname,
-    Body: fileStream,
-    ContentType: file.mimetype,
-  };
-
   try {
-    await s3.send(new PutObjectCommand(params));
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const fileStream = fs.createReadStream(file.path);
+    const key = file.originalname; // later we will improve this
+
+    // 1️⃣ Upload file to S3
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: process.env.AWS_BUCKET,
+        Key: key,
+        Body: fileStream,
+        ContentType: file.mimetype,
+      })
+    );
+
+    // 2️⃣ Generate signed URL (valid 5 minutes)
+    const signedUrl = await getSignedUrl(
+      s3,
+      new GetObjectCommand({
+        Bucket: process.env.AWS_BUCKET,
+        Key: key,
+      }),
+      { expiresIn: 300 }
+    );
+
+    // 3️⃣ Remove local temp file
     fs.unlinkSync(file.path);
-    res.json({ message: "Upload success", url: `https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${file.originalname}` });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Upload failed" });
+
+    return res.json({
+      message: "Upload success",
+      signedUrl,
+      expiresIn: "5 minutes",
+    });
+
+  } catch (error) {
+    console.error("Upload Error:", error);
+    return res.status(500).json({ error: "Upload failed" });
   }
 };
 
+
+// ==============================
+// MULTIPLE FILE UPLOAD
+// ==============================
+
 export const uploadMultiple = async (req, res) => {
-  const files = req.files;
   try {
-    const urls = [];
+    const files = req.files;
+
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: "No files uploaded" });
+    }
+
+    const signedUrls = [];
+
     for (const file of files) {
       const fileStream = fs.createReadStream(file.path);
-      const params = {
-        Bucket: process.env.AWS_BUCKET,
-        Key: file.originalname,
-        Body: fileStream,
-        ContentType: file.mimetype,
-      };
-      await s3.send(new PutObjectCommand(params));
+      const key = file.originalname;
+
+      // Upload
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: process.env.AWS_BUCKET,
+          Key: key,
+          Body: fileStream,
+          ContentType: file.mimetype,
+        })
+      );
+
+      // Generate signed URL
+      const signedUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand({
+          Bucket: process.env.AWS_BUCKET,
+          Key: key,
+        }),
+        { expiresIn: 300 }
+      );
+
       fs.unlinkSync(file.path);
-      urls.push(`https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${file.originalname}`);
+
+      signedUrls.push(signedUrl);
     }
-    res.json({ message: "Upload success", urls });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Upload failed" });
+
+    return res.json({
+      message: "Upload success",
+      signedUrls,
+      expiresIn: "5 minutes",
+    });
+
+  } catch (error) {
+    console.error("Upload Error:", error);
+    return res.status(500).json({ error: "Upload failed" });
   }
 };
