@@ -1,57 +1,18 @@
 import express from "express";
-import multer from "multer";
 import cors from "cors";
 import dotenv from "dotenv";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import fs from "fs";
+
+import { uploadRouter } from "./routes/uploadRoutes.js";
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
-// store temp file locally
-const upload = multer({ dest: "uploads/" });
+// Use upload routes
+app.use("/upload", uploadRouter);
 
-// S3 config
-const s3 = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY,
-    secretAccessKey: process.env.AWS_SECRET_KEY,
-  },
+app.listen(process.env.PORT || 5000, () => {
+  console.log(`Server running on port ${process.env.PORT || 5000}`);
 });
-
-// upload route
-app.post("/upload", upload.single("file"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-
-    const file = req.file;
-    const fileStream = fs.createReadStream(file.path);
-
-    const uploadParams = {
-      Bucket: process.env.AWS_BUCKET,
-      Key: file.originalname,
-      Body: fileStream,
-      ContentType: file.mimetype,
-    };
-
-    await s3.send(new PutObjectCommand(uploadParams));
-
-    // delete temp file
-    fs.unlinkSync(file.path);
-
-    res.json({
-      message: "Upload success",
-      url: `https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${file.originalname}`,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Upload failed" });
-  }
-});
-
-app.listen(5000, () => console.log("Server running on port 5000"));
