@@ -8,11 +8,25 @@ export default function MultiFileUpload() {
     if (files.length === 0) return alert("Select files");
 
     const formData = new FormData();
-    for (let f of files) formData.append("files", f); // must match backend: "files"
+    for (let f of files) {
+      formData.append("files", f);
+    }
 
     try {
-      const res = await axios.post("http://localhost:5000/api/upload/multiple", formData); // ✅ add /api
-      alert("Upload success! URLs: " + res.data.urls.join(", "));
+      const res = await axios.post(
+        "http://localhost:5000/api/upload/multiple",
+        formData
+      );
+
+      console.log(res.data); // 🔎 Debug
+
+      alert("Upload success! Signed URLs generated.");
+
+      // Open first file automatically (optional)
+      if (res.data.signedUrls.length > 0) {
+        window.open(res.data.signedUrls[0], "_blank");
+      }
+
     } catch (err) {
       console.error(err);
       alert("Upload failed");
@@ -21,7 +35,11 @@ export default function MultiFileUpload() {
 
   return (
     <div>
-      <input type="file" multiple onChange={(e) => setFiles(Array.from(e.target.files))} />
+      <input
+        type="file"
+        multiple
+        onChange={(e) => setFiles(Array.from(e.target.files))}
+      />
       <button onClick={handleUpload}>Upload Multiple</button>
     </div>
   );
