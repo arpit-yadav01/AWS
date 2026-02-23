@@ -10,8 +10,10 @@ dotenv.config();
 const app = express();
 app.use(cors());
 
+// store temp file locally
 const upload = multer({ dest: "uploads/" });
 
+// S3 config
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
   credentials: {
@@ -20,21 +22,26 @@ const s3 = new S3Client({
   },
 });
 
+// upload route
 app.post("/upload", upload.single("file"), async (req, res) => {
-  const file = req.file;
-
-  const fileStream = fs.createReadStream(file.path);
-
-  const uploadParams = {
-    Bucket: process.env.AWS_BUCKET,
-    Key: file.originalname,
-    Body: fileStream,
-    ContentType: file.mimetype,
-  };
-
   try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const file = req.file;
+    const fileStream = fs.createReadStream(file.path);
+
+    const uploadParams = {
+      Bucket: process.env.AWS_BUCKET,
+      Key: file.originalname,
+      Body: fileStream,
+      ContentType: file.mimetype,
+    };
+
     await s3.send(new PutObjectCommand(uploadParams));
 
+    // delete temp file
     fs.unlinkSync(file.path);
 
     res.json({
