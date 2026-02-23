@@ -1,7 +1,6 @@
-import fs from "fs";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import fs from "fs";
 import dotenv from "dotenv";
-
 dotenv.config();
 
 const s3 = new S3Client({
@@ -12,13 +11,11 @@ const s3 = new S3Client({
   },
 });
 
-// Single file upload
-export const uploadFile = async (req, res) => {
+export const uploadSingle = async (req, res) => {
   const file = req.file;
-  if (!file) return res.status(400).json({ error: "No file uploaded" });
-
   const fileStream = fs.createReadStream(file.path);
-  const uploadParams = {
+
+  const params = {
     Bucket: process.env.AWS_BUCKET,
     Key: file.originalname,
     Body: fileStream,
@@ -26,26 +23,19 @@ export const uploadFile = async (req, res) => {
   };
 
   try {
-    await s3.send(new PutObjectCommand(uploadParams));
-    fs.unlinkSync(file.path); // remove local file
-    res.json({
-      message: "Upload success",
-      url: `https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${file.originalname}`,
-    });
+    await s3.send(new PutObjectCommand(params));
+    fs.unlinkSync(file.path);
+    res.json({ message: "Upload success", url: `https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${file.originalname}` });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Upload failed" });
   }
 };
 
-// Multiple files upload
-export const uploadMultipleFiles = async (req, res) => {
+export const uploadMultiple = async (req, res) => {
   const files = req.files;
-  if (!files || files.length === 0) return res.status(400).json({ error: "No files uploaded" });
-
-  const uploadedFiles = [];
-
   try {
+    const urls = [];
     for (const file of files) {
       const fileStream = fs.createReadStream(file.path);
       const params = {
@@ -56,14 +46,9 @@ export const uploadMultipleFiles = async (req, res) => {
       };
       await s3.send(new PutObjectCommand(params));
       fs.unlinkSync(file.path);
-
-      uploadedFiles.push({
-        name: file.originalname,
-        url: `https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${file.originalname}`,
-      });
+      urls.push(`https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${file.originalname}`);
     }
-
-    res.json({ message: "Files uploaded successfully", files: uploadedFiles });
+    res.json({ message: "Upload success", urls });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Upload failed" });
