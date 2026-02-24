@@ -12,7 +12,7 @@ export default function SingleFileUpload() {
 
     try {
       const res = await axios.post(
-        "http://localhost:5000/api/upload",
+        "http://43.205.215.233/api/upload",
         formData
       );
 
