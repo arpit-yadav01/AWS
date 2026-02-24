@@ -14,7 +14,7 @@ export default function MultiFileUpload() {
 
     try {
       const res = await axios.post(
-        "http://localhost:5000/api/upload/multiple",
+        "http://43.205.215.233/api/upload/multiple",
         formData
       );
 
